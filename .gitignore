@@ -1,0 +1,99 @@
+# -----------------------------
+# OS / Editor / Tooling
+# -----------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# -----------------------------
+# Environment / Secrets
+# -----------------------------
+.env
+.env.*
+!.env.example
+!.env*.example
+
+# -----------------------------
+# Logs / Temp / Cache
+# -----------------------------
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+.cache/
+
+# -----------------------------
+# Go
+# -----------------------------
+# Binaries / build output
+bin/
+dist/
+build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test / coverage / profiling
+*.test
+*.out
+coverage.out
+cover.out
+coverage.txt
+*.coverprofile
+coverage/
+*.prof
+cpu.prof
+mem.prof
+
+# Go workspace artifacts
+go.work.sum
+
+# Vendoring (ignore only if you do not commit vendor)
+vendor/
+
+# -----------------------------
+# Bun / JavaScript / TypeScript
+# -----------------------------
+node_modules/
+
+# Bun files
+bun.lockb
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+.next/
+out/
+.nuxt/
+.svelte-kit/
+.vite/
+vite.svg
+*.tsbuildinfo
+
+# Test outputs
+coverage-final.json
+.nyc_output/
+playwright-report/
+test-results/
+
+# Bundler / framework caches
+.parcel-cache/
+.turbo/
+.eslintcache
+
+# -----------------------------
+# Docker / Compose overrides
+# -----------------------------
+docker-compose.override.yml
+
