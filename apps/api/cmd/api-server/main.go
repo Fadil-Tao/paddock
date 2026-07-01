@@ -11,16 +11,19 @@ import (
 	"github.com/Fadil-Tao/paddock/internal/runner"
 	"github.com/Fadil-Tao/paddock/internal/transport"
 	"github.com/Fadil-Tao/paddock/internal/transport/handlers"
+	"github.com/joho/godotenv"
 	"github.com/moby/moby/client"
 	"github.com/rs/zerolog/log"
 )
 
 
 func main(){ 
+	_ = godotenv.Load()
 	c, err := client.New(client.FromEnv)
 	if err != nil {
 			log.Fatal().Err(err).Msg("failed to connect to Docker")
 	}
+
 
 	d := runner.NewDockerRunner(c)
 	h :=  handlers.NewSandboxHandler(d)

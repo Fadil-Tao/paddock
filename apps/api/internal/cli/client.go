@@ -8,20 +8,23 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
 type Client struct {
 	baseURL string
 	http    *http.Client
+	apiKey string
 }
 
 func NewClient(baseURL string) *Client {
+	apiKey := os.Getenv("PADDOCK_API_KEY")
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: baseURL + "/api",
 		http:    &http.Client{Timeout: 30 * time.Second},
+		apiKey: apiKey,
 	}
 }
 
@@ -53,6 +56,9 @@ func do[T any](c *Client, ctx context.Context, method, path string, body any) (T
 	if err != nil {
 		return out, err
 	}
+
+	req.Header.Set("X-API-Key", c.apiKey )
+
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

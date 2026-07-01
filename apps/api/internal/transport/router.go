@@ -1,6 +1,10 @@
 package transport
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/Fadil-Tao/paddock/internal/transport/middleware"
+)
 
 type SandboxHandler interface {
 	Create(w http.ResponseWriter, r *http.Request)
@@ -30,9 +34,11 @@ func (h HttpRouter) Route() *http.ServeMux {
 	mux.HandleFunc("GET /sandboxes/{id}", sandboxHandler.GetById)
 	mux.HandleFunc("POST /sandboxes", sandboxHandler.Create)
 	mux.HandleFunc("DELETE /sandboxes/{id}", sandboxHandler.Remove)
-	mux.HandleFunc("PATCH /sandbox/{id}", sandboxHandler.UpdateSandbox)
+	mux.HandleFunc("PATCH /sandboxes/{id}", sandboxHandler.UpdateSandbox)
 	mux.HandleFunc("POST /sandboxes/{id}/execs", sandboxHandler.Exec)
 	mux.HandleFunc("GET /sandboxes/{id}/logs", sandboxHandler.Logs)
 
-	return mux
+	api :=  http.NewServeMux()
+	api.Handle("/api/", http.StripPrefix("/api", middleware.ApiKeyMiddleware(mux)))
+	return api
 }
