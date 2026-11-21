@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Download Firecracker + guest kernel and build the base rootfs (Ubuntu base +
-# paddock-agent) into the paddock assets dir. No root required.
+# Download Firecracker + guest kernel and build the base rootfs (plain Ubuntu
+# base, no paddock bits: the agent boots from an initramfs) into the paddock
+# assets dir. No root required.
 set -euo pipefail
 
 FC_VERSION=${FC_VERSION:-v1.18.0}
 KERNEL_KEY=${KERNEL_KEY:-firecracker-ci/v1.15/x86_64/vmlinux-6.1.155}
 UBUNTU_TARBALL=${UBUNTU_TARBALL:-ubuntu-base-24.04.5-base-amd64.tar.gz}
-ROOTFS_SIZE=${ROOTFS_SIZE:-4G}
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 data=${PADDOCK_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/paddock}
@@ -34,23 +34,18 @@ kernel=$cache/$(basename "$KERNEL_KEY")
 fetch "https://s3.amazonaws.com/spec.ccfc.min/$KERNEL_KEY" "$kernel"
 install -m 0644 "$kernel" "$assets/vmlinux"
 
-# Guest agent (static)
-echo "build paddock-agent"
-(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o "$work/paddock-agent" ./cmd/paddock-agent)
-
-# Rootfs: ubuntu base tarball + agent, written straight into ext4 via
-# `mke2fs -d <tarball>` so file ownership is preserved without root.
+# Rootfs: ubuntu base tarball written straight into ext4 via
+# `mke2fs -d <tarball>`, so file ownership is preserved without root. The
+# image is sized to its contents plus headroom; each sandbox's copy is grown
+# to its --disk size at create time.
 ubuntu=$cache/$UBUNTU_TARBALL
 fetch "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$UBUNTU_TARBALL" "$ubuntu"
-echo "build rootfs.ext4 ($ROOTFS_SIZE)"
 gzip -dc "$ubuntu" > "$work/rootfs.tar"
-mkdir -p "$work/overlay/usr/sbin" "$work/overlay/etc"
-install -m 0755 "$work/paddock-agent" "$work/overlay/usr/sbin/paddock-agent"
-echo paddock > "$work/overlay/etc/hostname"
-tar -rf "$work/rootfs.tar" -C "$work/overlay" --owner=0 --group=0 --numeric-owner \
-  ./usr/sbin/paddock-agent ./etc/hostname
+tar_mib=$(( $(stat -c %s "$work/rootfs.tar") / 1024 / 1024 ))
+size_mib=${ROOTFS_MIB:-$(( tar_mib * 5 / 4 + 64 ))}
+echo "build rootfs.ext4 (${size_mib}M)"
 rm -f "$work/rootfs.ext4"
-mke2fs -q -t ext4 -L rootfs -d "$work/rootfs.tar" "$work/rootfs.ext4" "$ROOTFS_SIZE"
+mke2fs -q -t ext4 -L rootfs -d "$work/rootfs.tar" "$work/rootfs.ext4" "${size_mib}M"
 mv "$work/rootfs.ext4" "$assets/rootfs.ext4"
 rm -f "$work/rootfs.tar"
 

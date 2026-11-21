@@ -21,6 +21,7 @@ linters:
         # from callers (see AGENTS.md "Trust boundary").
         - G204
         - G304
+        - G703
     nolintlint:
       require-explanation: true
       require-specific: true

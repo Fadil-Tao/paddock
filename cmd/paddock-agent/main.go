@@ -1,11 +1,13 @@
-// Command paddock-agent runs inside a sandbox VM. When started as PID 1 it
-// does minimal init work (mounts, hostname, zombie reaping), then serves
-// command execution requests from the host over vsock.
+// Command paddock-agent runs inside a sandbox VM. It boots as /init from the
+// initramfs: mounts the root disk, switches root to it, grows the filesystem
+// to the disk size, does minimal init work (mounts, hostname, zombie reaping),
+// then serves command execution requests from the host over vsock.
 package main
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -14,11 +16,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/Fadil-Tao/paddock/internal/initrd"
 	"github.com/Fadil-Tao/paddock/internal/proto"
 )
+
+// rootDevice is the sandbox's root disk (the first virtio-blk drive).
+const rootDevice = "/dev/vda"
 
 // version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
@@ -28,7 +35,16 @@ func main() {
 	log.SetFlags(0)
 
 	if os.Getpid() == 1 {
+		// A failed switch leaves nothing to serve; exiting PID 1 panics the
+		// kernel, the VM reboots (reboot=k) and firecracker exits, so the
+		// host's create fails fast with this message in the log.
+		if err := switchRoot(rootDevice, initrd.NewRoot); err != nil {
+			log.Fatalf("switch root: %v", err)
+		}
 		initSystem()
+		if err := growRootFS(rootDevice); err != nil {
+			log.Printf("grow rootfs: %v", err)
+		}
 	}
 	go reap()
 
@@ -218,4 +234,75 @@ func handle(c io.ReadWriteCloser) {
 		code = 128 + int(ws.Signal())
 	}
 	send(proto.Exit, proto.ExitPayload(code))
+}
+
+// switchRoot mounts dev at target and makes it the root filesystem, the same
+// way switch_root(8) does: move the mount over "/", chroot into it.
+func switchRoot(dev, target string) error {
+	if err := unix.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
+		return fmt.Errorf("mount /dev: %w", err)
+	}
+	var err error
+	for range 200 {
+		if _, err = os.Stat(dev); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		return fmt.Errorf("wait for %s: %w", dev, err)
+	}
+	if err := unix.Mount(dev, target, "ext4", 0, ""); err != nil {
+		return fmt.Errorf("mount %s: %w", dev, err)
+	}
+	// initSystem mounts a fresh /dev inside the new root. Detach this one;
+	// our console fds stay valid.
+	_ = unix.Unmount("/dev", unix.MNT_DETACH)
+	// Free the initramfs copy of this binary; the running image stays mapped.
+	_ = os.Remove("/init")
+
+	if err := unix.Chdir(target); err != nil {
+		return err
+	}
+	if err := unix.Mount(".", "/", "", unix.MS_MOVE, ""); err != nil {
+		return fmt.Errorf("move root: %w", err)
+	}
+	if err := unix.Chroot("."); err != nil {
+		return fmt.Errorf("chroot: %w", err)
+	}
+	return unix.Chdir("/")
+}
+
+// ext4IocResizeFS is EXT4_IOC_RESIZE_FS: _IOW('f', 16, __u64).
+const ext4IocResizeFS = 0x40086610
+
+// growRootFS grows the mounted ext4 root online to fill dev. The host only
+// extends the (sparse) disk file; the guest kernel does the resize, so the
+// host needs no e2fsprogs. Growing to the current size is a no-op.
+func growRootFS(dev string) error {
+	f, err := os.Open(dev)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	var devBytes uint64
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), unix.BLKGETSIZE64, uintptr(unsafe.Pointer(&devBytes))) //nolint:gosec // ioctl out-param; pointer valid for the call
+	if errno != 0 {
+		return fmt.Errorf("BLKGETSIZE64: %w", errno)
+	}
+	var st unix.Statfs_t
+	if err := unix.Statfs("/", &st); err != nil {
+		return err
+	}
+	blocks := devBytes / uint64(st.Bsize) //nolint:gosec // block size is positive
+	root, err := os.Open("/")
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	_, _, errno = unix.Syscall(unix.SYS_IOCTL, root.Fd(), ext4IocResizeFS, uintptr(unsafe.Pointer(&blocks))) //nolint:gosec // ioctl in-param; pointer valid for the call
+	if errno != 0 {
+		return fmt.Errorf("EXT4_IOC_RESIZE_FS to %d blocks: %w", blocks, errno)
+	}
+	return nil
 }

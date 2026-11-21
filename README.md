@@ -20,7 +20,7 @@ Assets and sandbox state live in `$PADDOCK_HOME` (default `~/.local/share/paddoc
 ## Usage
 
 ```sh
-id=$(./bin/paddock create --cpus 2 --mem 1024)
+id=$(./bin/paddock create --cpus 2 --mem 1024 --disk 20G)   # disk is sparse
 ./bin/paddock exec "$id" -- uname -a
 ./bin/paddock exec "$id" -- sh -c 'echo hi; exit 3'; echo $?   # exit code passes through
 ./bin/paddock list
@@ -29,10 +29,12 @@ id=$(./bin/paddock create --cpus 2 --mem 1024)
 
 ## How it works
 
-- `paddock create` copies the base rootfs (reflink when supported), starts
-  `firecracker` detached, and waits for the guest agent.
-- `paddock-agent` runs as PID 1 inside the VM and executes commands sent over
-  vsock, streaming stdout/stderr and the exit code back.
+- `paddock create` copies the base rootfs (reflink when supported), extends it
+  to the requested disk size, starts `firecracker` detached, and waits for the
+  guest agent.
+- `paddock-agent` boots from an initramfs, switches root to the sandbox disk,
+  runs as PID 1, and executes commands sent over vsock, streaming
+  stdout/stderr and the exit code back. Root images stay plain Linux.
 
 ## Status
 

@@ -4,7 +4,8 @@
 //
 //	assets/firecracker      firecracker binary
 //	assets/vmlinux          guest kernel
-//	assets/rootfs.ext4      base root filesystem (contains paddock-agent)
+//	assets/rootfs.ext4      base root filesystem (plain ext4, no paddock bits)
+//	cache/initrd-*.cpio     initramfs with paddock-agent, keyed by agent hash
 //	sandboxes/<id>/         one dir per sandbox: meta, disk, sockets, log
 package sandbox
 
@@ -27,14 +28,23 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Fadil-Tao/paddock/internal/initrd"
 	"github.com/Fadil-Tao/paddock/internal/proto"
 )
 
-const agentPath = "/usr/sbin/paddock-agent"
+// Defaults applied by Create for zero Spec fields.
+const (
+	DefaultCPUs      = 2
+	DefaultMemMiB    = 1024
+	DefaultDiskBytes = 10 << 30
+)
 
 type Spec struct {
 	CPUs   int
 	MemMiB int
+	// DiskBytes is the root disk size. The disk file is sparse, so this is a
+	// limit, not an allocation. Must be at least the base image size.
+	DiskBytes int64
 }
 
 type Sandbox struct {
@@ -42,12 +52,16 @@ type Sandbox struct {
 	PID       int       `json:"pid"`
 	CPUs      int       `json:"cpus"`
 	MemMiB    int       `json:"mem_mib"`
+	DiskBytes int64     `json:"disk_bytes"`
 	CreatedAt time.Time `json:"created_at"`
 	Running   bool      `json:"-"`
 }
 
 type Manager struct {
+	// Root is the data dir (see DefaultRoot).
 	Root string
+	// Agent is the path to the paddock-agent binary booted as /init.
+	Agent string
 }
 
 // DefaultRoot returns $PADDOCK_HOME, else $XDG_DATA_HOME/paddock, else
@@ -69,14 +83,28 @@ func (m *Manager) dir(id string) string     { return filepath.Join(m.Root, "sand
 func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error) {
 	for _, a := range []string{"firecracker", "vmlinux", "rootfs.ext4"} {
 		if _, err := os.Stat(m.asset(a)); err != nil {
-			return nil, fmt.Errorf("missing asset %s (run scripts/build-assets.sh): %w", a, err)
+			return nil, fmt.Errorf("missing asset %s (run make assets): %w", a, err)
 		}
 	}
 	if spec.CPUs <= 0 {
-		spec.CPUs = 2
+		spec.CPUs = DefaultCPUs
 	}
 	if spec.MemMiB <= 0 {
-		spec.MemMiB = 1024
+		spec.MemMiB = DefaultMemMiB
+	}
+	if spec.DiskBytes <= 0 {
+		spec.DiskBytes = DefaultDiskBytes
+	}
+	base, err := os.Stat(m.asset("rootfs.ext4"))
+	if err != nil {
+		return nil, err
+	}
+	if spec.DiskBytes < base.Size() {
+		return nil, fmt.Errorf("disk size %d bytes is smaller than the base image (%d bytes)", spec.DiskBytes, base.Size())
+	}
+	initrdPath, err := initrd.Ensure(filepath.Join(m.Root, "cache"), m.Agent)
+	if err != nil {
+		return nil, fmt.Errorf("initrd: %w", err)
 	}
 
 	id := newID()
@@ -98,16 +126,22 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error)
 	if out, err := exec.CommandContext(ctx, "cp", "--reflink=auto", "--sparse=always", m.asset("rootfs.ext4"), disk).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("copy rootfs: %w: %s", err, out)
 	}
+	// Extend the sparse file; the guest agent grows the filesystem at boot.
+	if err := os.Truncate(disk, spec.DiskBytes); err != nil {
+		return nil, fmt.Errorf("resize disk: %w", err)
+	}
 
 	cfg := map[string]any{
 		"boot-source": map[string]any{
 			"kernel_image_path": m.asset("vmlinux"),
-			"boot_args":         "console=ttyS0 reboot=k panic=1 pci=off init=" + agentPath,
+			"initrd_path":       initrdPath,
+			"boot_args":         "console=ttyS0 reboot=k panic=1 pci=off",
 		},
 		"drives": []map[string]any{{
+			// Not is_root_device: the initramfs agent mounts it as /dev/vda.
 			"drive_id":       "rootfs",
 			"path_on_host":   disk,
-			"is_root_device": true,
+			"is_root_device": false,
 			"is_read_only":   false,
 		}},
 		"machine-config": map[string]any{
@@ -145,7 +179,11 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error)
 	exited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(exited) }()
 
-	sb := &Sandbox{ID: id, PID: proc.Pid, CPUs: spec.CPUs, MemMiB: spec.MemMiB, CreatedAt: time.Now().UTC()}
+	sb := &Sandbox{
+		ID: id, PID: proc.Pid,
+		CPUs: spec.CPUs, MemMiB: spec.MemMiB, DiskBytes: spec.DiskBytes,
+		CreatedAt: time.Now().UTC(),
+	}
 	if err := writeJSON(filepath.Join(dir, "meta.json"), sb); err != nil {
 		return nil, err
 	}
