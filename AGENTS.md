@@ -21,6 +21,7 @@ paddock: self-hosted Firecracker microVM sandboxes for AI agents. One Go binary 
 
 - **Guest reaping:** `paddock-agent` runs as PID 1 and owns all `wait4` calls. Commands are started and registered in `waiters` under `mu`, and the reaper reaps under the same lock. Use that path for every child process; `cmd.Wait()` would race the reaper.
 - **Trust boundary:** everything coming from inside a VM (agent output, guest files) is untrusted input. Host code treats it as data and bounds its size (`proto.MaxFrame`).
+- **Pinned downloads:** everything paddock downloads is listed in `internal/assets/assets.json` with a sha256 and verified before install. Bump a version by updating URL and checksum together; base images pin their `FROM` by digest.
 - **Plain images:** root filesystem images stay generic Linux with nothing paddock-specific inside. Guest-side behaviour belongs in `paddock-agent`, which boots from the initramfs.
 - **Sandbox IDs** are the only identifiers taken from callers; host paths are always derived from the data dir, never accepted as input.
 

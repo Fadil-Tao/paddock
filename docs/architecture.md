@@ -20,9 +20,11 @@ The CLI finds the agent at `$PADDOCK_AGENT`, else next to its own binary.
 `$PADDOCK_HOME`, else `$XDG_DATA_HOME/paddock`, else `~/.local/share/paddock`.
 
 ```
-assets/firecracker       firecracker binary
-assets/vmlinux           guest kernel
-assets/rootfs.ext4       base rootfs: plain Ubuntu base, nothing paddock-specific
+assets/firecracker       firecracker binary  ┐ `paddock pull`, pinned + sha256-verified
+assets/vmlinux           guest kernel        ┘ (internal/assets/assets.json)
+assets/.<name>.sha256    which verified download each file came from
+assets/rootfs.ext4       base rootfs: plain Linux, nothing paddock-specific
+                         (`paddock image build images/ubuntu`)
 cache/initrd-<hash>.cpio initramfs (agent as /init), keyed by agent hash
 sandboxes/<id>/
   meta.json              id, pid, cpus, mem, disk, created_at
@@ -42,6 +44,10 @@ A sandbox is "running" when `meta.pid` is alive, not a zombie, and its cmdline r
 3. Agent replies with frames: `type(1) | len(4, BE) | payload`. Types: `Stdout`, `Stderr`, then exactly one terminal `Exit` (4-byte exit code) or `Error` (command never started).
 
 One connection runs one command. Exit codes of signalled processes are `128 + signal`.
+
+## Images
+
+`paddock image build <dir>` builds a Dockerfile with Podman (or Docker; override with `$PADDOCK_CONTAINER_ENGINE`), exports the container filesystem as a tarball and writes it into ext4 with `mke2fs -d`, which keeps file ownership without root. The image is sized to its contents plus headroom; each sandbox grows its copy at create time.
 
 ## Guest boot
 

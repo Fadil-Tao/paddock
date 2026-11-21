@@ -10,11 +10,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/Fadil-Tao/paddock/internal/assets"
+	"github.com/Fadil-Tao/paddock/internal/image"
 	"github.com/Fadil-Tao/paddock/internal/proto"
 	"github.com/Fadil-Tao/paddock/internal/sandbox"
 )
@@ -30,6 +33,8 @@ commands:
   exec <id> -- <cmd> [args...]    run a command in a sandbox
   list                            list sandboxes
   destroy <id>...                 stop and delete sandboxes
+  pull                            download firecracker + kernel (sha256-verified)
+  image build <dir>               build the base rootfs from a Dockerfile dir
   version                         print version
 `
 
@@ -58,6 +63,10 @@ func main() {
 		err = list(m)
 	case "destroy", "rm":
 		err = destroy(m, args)
+	case "pull":
+		err = pull(ctx, m)
+	case "image":
+		err = imageCmd(ctx, m, args)
 	case "version", "--version":
 		fmt.Println(version)
 		return
@@ -183,4 +192,29 @@ func formatSize(b int64) string {
 	default:
 		return fmt.Sprintf("%dB", b)
 	}
+}
+
+func pull(ctx context.Context, m *sandbox.Manager) error {
+	man, err := assets.Default()
+	if err != nil {
+		return err
+	}
+	p := &assets.Puller{Dir: m.AssetsDir(), Arch: runtime.GOARCH, Log: os.Stderr}
+	return p.Pull(ctx, man)
+}
+
+func imageCmd(ctx context.Context, m *sandbox.Manager, args []string) error {
+	if len(args) != 2 || args[0] != "build" {
+		return errors.New("usage: paddock image build <dir>")
+	}
+	if err := os.MkdirAll(m.AssetsDir(), 0o750); err != nil {
+		return err
+	}
+	out := filepath.Join(m.AssetsDir(), "rootfs.ext4")
+	b := &image.Builder{Log: os.Stderr}
+	if err := b.Build(ctx, args[1], out); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "wrote", out)
+	return nil
 }

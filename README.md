@@ -6,14 +6,18 @@ microVM running Ubuntu 24.04, booting in under a second on your own hardware.
 ## Requirements
 
 - Linux x86_64 with KVM (`/dev/kvm` readable/writable by your user)
-- Go 1.26+, `curl`, `mke2fs` (e2fsprogs >= 1.47.1)
+- Go 1.26+ (to build), plus for building the base image: Podman or Docker and
+  `mke2fs` (e2fsprogs >= 1.47.1)
 
 ## Setup
 
 ```sh
-make assets   # fetch firecracker + kernel, build rootfs (no root needed)
-make build    # ./bin/paddock, ./bin/paddock-agent
+make build                                   # ./bin/paddock, ./bin/paddock-agent
+./bin/paddock pull                           # firecracker + kernel, sha256-verified
+./bin/paddock image build images/ubuntu      # base rootfs from a Dockerfile (no root)
 ```
+
+`make assets` runs the last two.
 
 Assets and sandbox state live in `$PADDOCK_HOME` (default `~/.local/share/paddock`).
 

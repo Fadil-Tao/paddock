@@ -32,5 +32,4 @@ go.work.sum
 # .vscode/
 
 # Build output
-/build/
 /bin/

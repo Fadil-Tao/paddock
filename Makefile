@@ -5,7 +5,7 @@ BIN     := bin
 
 export CGO_ENABLED := 0
 
-.PHONY: all build test e2e lint fmt tidy assets clean
+.PHONY: all build test e2e lint fmt tidy assets pull image clean
 
 all: lint test build
 
@@ -27,8 +27,13 @@ fmt: ## Apply formatters
 tidy:
 	go mod tidy
 
-assets: ## Download firecracker + kernel, build base rootfs
-	./scripts/build-assets.sh
+assets: pull image ## Everything `make e2e` needs
+
+pull: build ## Download firecracker + kernel (sha256-verified)
+	$(BIN)/paddock pull
+
+image: build ## Build the base rootfs from images/ubuntu (needs podman or docker, mke2fs)
+	$(BIN)/paddock image build images/ubuntu
 
 clean:
-	rm -rf $(BIN) build
+	rm -rf $(BIN)

@@ -22,7 +22,6 @@
             gotools
             gnumake
             e2fsprogs
-            curl
             cpio
           ];
           env.CGO_ENABLED = "0";

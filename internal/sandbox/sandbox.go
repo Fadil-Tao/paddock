@@ -77,13 +77,16 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".local", "share", "paddock")
 }
 
-func (m *Manager) asset(name string) string { return filepath.Join(m.Root, "assets", name) }
+// AssetsDir holds firecracker, vmlinux and rootfs.ext4.
+func (m *Manager) AssetsDir() string { return filepath.Join(m.Root, "assets") }
+
+func (m *Manager) asset(name string) string { return filepath.Join(m.AssetsDir(), name) }
 func (m *Manager) dir(id string) string     { return filepath.Join(m.Root, "sandboxes", id) }
 
 func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error) {
 	for _, a := range []string{"firecracker", "vmlinux", "rootfs.ext4"} {
 		if _, err := os.Stat(m.asset(a)); err != nil {
-			return nil, fmt.Errorf("missing asset %s (run make assets): %w", a, err)
+			return nil, fmt.Errorf("missing asset %s (run `paddock pull` and `paddock image build images/ubuntu`): %w", a, err)
 		}
 	}
 	if spec.CPUs <= 0 {

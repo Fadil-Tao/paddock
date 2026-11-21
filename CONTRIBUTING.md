@@ -2,10 +2,10 @@
 
 ## Setup
 
-Requirements: Linux with KVM, Go (see `go.mod`), `golangci-lint` v2, `mke2fs` >= 1.47.1, `curl`. With Nix, `nix develop` provides all of them.
+Requirements: Linux with KVM, Go (see `go.mod`), `golangci-lint` v2, `mke2fs` >= 1.47.1, and Podman or Docker. With Nix, `nix develop` provides all but the container engine.
 
 ```sh
-make assets   # one time: firecracker, kernel, rootfs into ~/.local/share/paddock/assets
+make assets   # one time: paddock pull + paddock image build images/ubuntu
 make          # lint + unit tests + build into ./bin
 make e2e      # boots real VMs
 ```
