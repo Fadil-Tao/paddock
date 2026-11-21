@@ -61,7 +61,7 @@ func initSystem() {
 		{"tmpfs", "/tmp", "tmpfs"},
 	}
 	for _, m := range mounts {
-		_ = os.MkdirAll(m.target, 0o755)
+		_ = os.MkdirAll(m.target, 0o755) //nolint:gosec // standard mount point perms; guest is single-tenant root
 		if err := unix.Mount(m.src, m.target, m.fstype, 0, ""); err != nil && !errors.Is(err, unix.EBUSY) {
 			log.Printf("mount %s: %v", m.target, err)
 		}
@@ -69,9 +69,13 @@ func initSystem() {
 	if err := unix.Sethostname([]byte("paddock")); err != nil {
 		log.Printf("sethostname: %v", err)
 	}
-	os.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-	os.Setenv("HOME", "/root")
-	os.Setenv("TERM", "xterm-256color")
+	for k, v := range map[string]string{
+		"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME": "/root",
+		"TERM": "xterm-256color",
+	} {
+		_ = os.Setenv(k, v) // only fails on invalid keys
+	}
 }
 
 // Exit statuses are collected by a single reaper so that, as PID 1, we also
@@ -108,11 +112,11 @@ func listenVsock(port uint32) (int, error) {
 		return -1, err
 	}
 	if err := unix.Bind(fd, &unix.SockaddrVM{CID: unix.VMADDR_CID_ANY, Port: port}); err != nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return -1, err
 	}
 	if err := unix.Listen(fd, 128); err != nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return -1, err
 	}
 	return fd, nil
@@ -145,8 +149,8 @@ func handle(c io.ReadWriteCloser) {
 	}
 	errR, errW, err := os.Pipe()
 	if err != nil {
-		outR.Close()
-		outW.Close()
+		_ = outR.Close()
+		_ = outW.Close()
 		send(proto.Error, []byte(err.Error()))
 		return
 	}
@@ -168,11 +172,11 @@ func handle(c io.ReadWriteCloser) {
 		waiters[cmd.Process.Pid] = exited
 	}
 	mu.Unlock()
-	outW.Close()
-	errW.Close()
+	_ = outW.Close()
+	_ = errW.Close()
 	if err != nil {
-		outR.Close()
-		errR.Close()
+		_ = outR.Close()
+		_ = errR.Close()
 		send(proto.Error, []byte(err.Error()))
 		return
 	}
@@ -206,8 +210,8 @@ func handle(c io.ReadWriteCloser) {
 	case <-drained:
 	case <-time.After(2 * time.Second):
 	}
-	outR.Close()
-	errR.Close()
+	_ = outR.Close()
+	_ = errR.Close()
 
 	code := ws.ExitStatus()
 	if ws.Signaled() {

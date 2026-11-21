@@ -81,7 +81,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error)
 
 	id := newID()
 	dir := m.dir(id)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
 	var proc *os.Process
@@ -96,7 +96,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Sandbox, err error)
 
 	disk := filepath.Join(dir, "rootfs.ext4")
 	if out, err := exec.CommandContext(ctx, "cp", "--reflink=auto", "--sparse=always", m.asset("rootfs.ext4"), disk).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("copy rootfs: %v: %s", err, out)
+		return nil, fmt.Errorf("copy rootfs: %w: %s", err, out)
 	}
 
 	cfg := map[string]any{
@@ -162,7 +162,7 @@ func waitAgent(ctx context.Context, dir string, exited <-chan struct{}, timeout 
 	for {
 		c, err := dialAgent(dir)
 		if err == nil {
-			c.Close()
+			_ = c.Close()
 			return nil
 		}
 		select {
@@ -173,7 +173,7 @@ func waitAgent(ctx context.Context, dir string, exited <-chan struct{}, timeout 
 		case <-time.After(50 * time.Millisecond):
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("agent not ready after %s: %v", timeout, err)
+			return fmt.Errorf("agent not ready after %s: %w", timeout, err)
 		}
 	}
 }
@@ -194,17 +194,17 @@ func dialAgent(dir string) (*agentConn, error) {
 	}
 	_ = c.SetDeadline(time.Now().Add(2 * time.Second))
 	if _, err := fmt.Fprintf(c, "CONNECT %d\n", proto.Port); err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	r := bufio.NewReader(c)
 	line, err := r.ReadString('\n')
 	if err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, fmt.Errorf("vsock handshake: %w", err)
 	}
 	if !strings.HasPrefix(line, "OK ") {
-		c.Close()
+		_ = c.Close()
 		return nil, fmt.Errorf("vsock handshake: %q", strings.TrimSpace(line))
 	}
 	_ = c.SetDeadline(time.Time{})
@@ -226,7 +226,7 @@ func (m *Manager) Exec(ctx context.Context, id string, req proto.Request, stdout
 		return -1, err
 	}
 	defer c.Close()
-	stop := context.AfterFunc(ctx, func() { c.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = c.Close() })
 	defer stop()
 
 	if err := json.NewEncoder(c).Encode(req); err != nil {
@@ -242,9 +242,13 @@ func (m *Manager) Exec(ctx context.Context, id string, req proto.Request, stdout
 		}
 		switch typ {
 		case proto.Stdout:
-			stdout.Write(p)
+			if _, err := stdout.Write(p); err != nil {
+				return -1, fmt.Errorf("write stdout: %w", err)
+			}
 		case proto.Stderr:
-			stderr.Write(p)
+			if _, err := stderr.Write(p); err != nil {
+				return -1, fmt.Errorf("write stderr: %w", err)
+			}
 		case proto.Exit:
 			return proto.ParseExit(p)
 		case proto.Error:
@@ -344,7 +348,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
+	return os.WriteFile(path, append(b, '\n'), 0o600)
 }
 
 func tail(path string, n int) string {

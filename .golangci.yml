@@ -14,6 +14,13 @@ linters:
     - unconvert
     - unparam
   settings:
+    gosec:
+      excludes:
+        # Spawning firecracker/cp and reading/writing files under paddock's
+        # own data dir is the program's job; paths are derived, never taken
+        # from callers (see AGENTS.md "Trust boundary").
+        - G204
+        - G304
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -21,6 +28,9 @@ linters:
     presets:
       - comments
       - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec]
 
 formatters:
   enable:

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -72,7 +73,7 @@ func create(ctx context.Context, m *sandbox.Manager, args []string) error {
 	fs := flag.NewFlagSet("create", flag.ExitOnError)
 	cpus := fs.Int("cpus", 2, "vCPU count")
 	mem := fs.Int("mem", 1024, "memory in MiB")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: never returns an error
 
 	start := time.Now()
 	sb, err := m.Create(ctx, sandbox.Spec{CPUs: *cpus, MemMiB: *mem})
@@ -86,14 +87,14 @@ func create(ctx context.Context, m *sandbox.Manager, args []string) error {
 
 func execCmd(ctx context.Context, m *sandbox.Manager, args []string) (int, error) {
 	if len(args) < 2 {
-		return 0, fmt.Errorf("usage: paddock exec <id> -- <cmd> [args...]")
+		return 0, errors.New("usage: paddock exec <id> -- <cmd> [args...]")
 	}
 	id, argv := args[0], args[1:]
 	if argv[0] == "--" {
 		argv = argv[1:]
 	}
 	if len(argv) == 0 {
-		return 0, fmt.Errorf("no command given")
+		return 0, errors.New("no command given")
 	}
 	return m.Exec(ctx, id, proto.Request{Argv: argv}, os.Stdout, os.Stderr)
 }
@@ -118,7 +119,7 @@ func list(m *sandbox.Manager) error {
 
 func destroy(m *sandbox.Manager, ids []string) error {
 	if len(ids) == 0 {
-		return fmt.Errorf("usage: paddock destroy <id>...")
+		return errors.New("usage: paddock destroy <id> [id...]")
 	}
 	for _, id := range ids {
 		if err := m.Destroy(id); err != nil {
