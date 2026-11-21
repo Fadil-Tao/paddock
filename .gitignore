@@ -33,4 +33,4 @@ go.work.sum
 
 # Build output
 /build/
-/paddock
+/bin/

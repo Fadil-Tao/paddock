@@ -11,8 +11,8 @@ microVM running Ubuntu 24.04, booting in under a second on your own hardware.
 ## Setup
 
 ```sh
-./scripts/build-assets.sh   # fetch firecracker + kernel, build rootfs
-go build -o paddock ./cmd/paddock
+make assets   # fetch firecracker + kernel, build rootfs (no root needed)
+make build    # ./bin/paddock, ./bin/paddock-agent
 ```
 
 Assets and sandbox state live in `$PADDOCK_HOME` (default `~/.local/share/paddock`).
@@ -20,11 +20,11 @@ Assets and sandbox state live in `$PADDOCK_HOME` (default `~/.local/share/paddoc
 ## Usage
 
 ```sh
-id=$(./paddock create --cpus 2 --mem 1024)
-./paddock exec "$id" -- uname -a
-./paddock exec "$id" -- sh -c 'echo hi; exit 3'; echo $?   # exit code passes through
-./paddock list
-./paddock destroy "$id"
+id=$(./bin/paddock create --cpus 2 --mem 1024)
+./bin/paddock exec "$id" -- uname -a
+./bin/paddock exec "$id" -- sh -c 'echo hi; exit 3'; echo $?   # exit code passes through
+./bin/paddock list
+./bin/paddock destroy "$id"
 ```
 
 ## How it works
@@ -36,4 +36,12 @@ id=$(./paddock create --cpus 2 --mem 1024)
 
 ## Status
 
-Early. No networking, stop/resume, snapshots, or MCP server yet.
+Early. No networking, stop/resume, snapshots, or MCP server yet. See [docs/architecture.md](docs/architecture.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[Apache License 2.0](LICENSE)

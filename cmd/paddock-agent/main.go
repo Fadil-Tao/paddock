@@ -20,6 +20,9 @@ import (
 	"github.com/Fadil-Tao/paddock/internal/proto"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	log.SetPrefix("paddock-agent: ")
 	log.SetFlags(0)
@@ -33,7 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen vsock: %v", err)
 	}
-	log.Printf("listening on vsock port %d", proto.Port)
+	log.Printf("%s listening on vsock port %d", version, proto.Port)
 	for {
 		nfd, _, err := unix.Accept4(fd, unix.SOCK_CLOEXEC)
 		if err != nil {

@@ -14,6 +14,9 @@ import (
 	"github.com/Fadil-Tao/paddock/internal/sandbox"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 const usage = `usage: paddock <command> [args]
 
 commands:
@@ -21,6 +24,7 @@ commands:
   exec <id> -- <cmd> [args...]    run a command in a sandbox
   list                            list sandboxes
   destroy <id>...                 stop and delete sandboxes
+  version                         print version
 `
 
 func main() {
@@ -48,6 +52,9 @@ func main() {
 		err = list(m)
 	case "destroy", "rm":
 		err = destroy(m, args)
+	case "version", "--version":
+		fmt.Println(version)
+		return
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return
